@@ -37,7 +37,7 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # - Replaces variables with actual values (MySQL password and endpoint)
   # ==================================================================
   metadata_startup_script = templatefile("./scripts/phpmyadmin.sh.template", {
-    PASSWORD   = random_password.mysql_password.result,
+    PASSWORD   = random_password.mysql.result,
     MYSQL_HOST = "mysql.internal.db-zone.local"
     USER       = "sysadmin"
   })
@@ -65,7 +65,7 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # - Forces VM creation to wait for Cloud SQL instance to be ready
   # - Ensures startup script has a valid endpoint to connect to
   # =================================================================================
-  depends_on = [google_sql_database_instance.mysql_instance] # Wait for MySQL instance to be created
+  depends_on = [google_sql_database_instance.mysql] # Wait for MySQL instance to be created
 }
 
 # =================================================================================
