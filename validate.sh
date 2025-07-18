@@ -28,7 +28,7 @@ until curl -s --head --fail "http://$PHPMYADMIN_IP" > /dev/null; do
 done
 
 
-MYSQL_DNS="mysql.internal.db-zone.local"
+MYSQL_DNS="mysql.internal.mysql-zone.local"
 echo "NOTE: Hostname for mysql server is \"$MYSQL_DNS\""
 
 #-------------------------------------------------------------------------------

@@ -38,7 +38,7 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # ==================================================================
   metadata_startup_script = templatefile("./scripts/phpmyadmin.sh.template", {
     PASSWORD   = random_password.mysql.result,
-    MYSQL_HOST = "mysql.internal.db-zone.local"
+    MYSQL_HOST = "mysql.internal.mysql-zone.local"
     USER       = "sysadmin"
   })
 
