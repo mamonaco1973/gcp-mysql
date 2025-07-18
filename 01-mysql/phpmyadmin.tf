@@ -26,9 +26,9 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # - Adds external IP via `access_config {}` for internet access
   # =================================================================================
   network_interface {
-    network    = google_compute_network.postgres_vpc.id       # Connect to custom VPC
-    subnetwork = google_compute_subnetwork.postgres_subnet.id # Attach to defined subnet
-    access_config {}                                          # Enable public IP address
+    network    = google_compute_network.mysql_vpc.id       # Connect to custom VPC
+    subnetwork = google_compute_subnetwork.mysql_subnet.id # Attach to defined subnet
+    access_config {}                                       # Enable public IP address
   }
 
   # =================================================================================
@@ -65,7 +65,7 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # - Forces VM creation to wait for Cloud SQL instance to be ready
   # - Ensures startup script has a valid endpoint to connect to
   # =================================================================================
-  depends_on = [google_sql_database_instance.postgres]
+  depends_on = [google_sql_database_instance.mysql_instance] # Wait for MySQL instance to be created
 }
 
 # =================================================================================
