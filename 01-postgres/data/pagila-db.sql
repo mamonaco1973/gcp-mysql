@@ -1,3 +1,0 @@
-DROP DATABASE IF EXISTS pagila;
-CREATE DATABASE pagila;
-ALTER DATABASE pagila OWNER TO cloudsqladmin;

@@ -12,11 +12,11 @@ if [ $? -ne 0 ]; then
 fi
 
 # =================================================================================
-# DEPLOY POSTGRESQL INFRASTRUCTURE
+# DEPLOY MYSQL INFRASTRUCTURE
 # - Initializes and applies Terraform configuration for Cloud SQL
 # =================================================================================
 
-cd 01-postgres || { echo "ERROR: Directory '01-postgres' not found."; exit 1; }
+cd 01-mysql || { echo "ERROR: Directory '01-mysql' not found."; exit 1; }
 terraform init
 terraform apply -auto-approve
 cd ..

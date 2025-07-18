@@ -12,14 +12,14 @@ if [ $? -ne 0 ]; then
 fi
 
 # =================================================================================
-# DESTROY POSTGRESQL INFRASTRUCTURE
+# DESTROY MYSQL INFRASTRUCTURE
 # - Step-by-step teardown of Cloud SQL resources
 # - Partial destroy first (user + instance), then full cleanup
 # =================================================================================
 
-gcloud sql instances delete postgres-instance --quiet
+gcloud sql instances delete mysql-instance --quiet
 
-cd 01-postgres
+cd 01-mysql
 terraform init
 terraform destroy -auto-approve
 cd ..
