@@ -35,12 +35,13 @@ resource "google_sql_database_instance" "mysql" {
 
 # =================================================================================
 # CLOUD SQL USER: MYSQL
-# - Creates a SQL-level user named "mysqladmin"
+# - Creates a SQL-level user named "sysadmin
 # - Uses a strong, generated password from random_password.mysql
 # =================================================================================
 resource "google_sql_user" "mysql_user" {
   name     = "sysadmin" # Username for MySQL admin
   instance = google_sql_database_instance.mysql.name
+  host     = "%"        # Allow connections from any host (use with caution)    
   password = random_password.mysql.result # Secure, randomly generated password
 }
 
