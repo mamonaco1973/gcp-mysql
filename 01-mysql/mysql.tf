@@ -114,6 +114,8 @@ resource "google_dns_record_set" "mysql_dns" {
 # ===============================================================================
 # - Forces a delay to ensure Private Service Access is ready
 # - Prevents Cloud SQL creation failures due to race conditions
+# - Multiple GCP control planes must converge before private IP can be used.
+# - Doesn't appear to be an effective way to poll this
 # ===============================================================================
 resource "null_resource" "wait_for_vpc_peering" {
   depends_on = [
@@ -121,6 +123,6 @@ resource "null_resource" "wait_for_vpc_peering" {
   ]
 
   provisioner "local-exec" {
-    command = "echo 'NOTE: Waiting for VPC peering propagation' && sleep 120"
+    command = "echo 'NOTE: Waiting for VPC peering propagation' && sleep 300"
   }
 }
