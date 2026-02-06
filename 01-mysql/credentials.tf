@@ -1,38 +1,60 @@
-# =================================================================================
+# ===============================================================================
+# FILE: credentials.tf
+# ===============================================================================
+# Generates and securely stores MySQL credentials using Google Secret Manager.
+#
+# WORKFLOW:
+#   1. Generate a strong random password (alphanumeric only).
+#   2. Create a Secret Manager secret to hold MySQL credentials.
+#   3. Store the username and password as a JSON secret version.
+#
+# NOTES:
+#   - Passwords are never hardcoded or stored in plaintext in Terraform code.
+#   - Secrets are retrieved securely at runtime via IAM-controlled access.
+# ===============================================================================
+
+
+# ===============================================================================
 # GENERATE RANDOM PASSWORD FOR MYSQL USER
-# - Securely generates a 24-character alphanumeric password
-# - Special characters are disabled for better compatibility with scripts, shell, and tooling
-# - Output is used for secure service authentication (not stored in plaintext in code)
-# =================================================================================
+# ===============================================================================
+# - Generates a 24-character alphanumeric password
+# - Special characters are disabled for shell and tooling compatibility
+# - Used exclusively for secure service authentication
+# ===============================================================================
 resource "random_password" "mysql" {
   length  = 24    # Strong entropy: 24-character password
-  special = false # Disable special characters to avoid shell/script issues
+  special = false # Avoid special characters for scripting compatibility
 }
 
-# =================================================================================
+
+# ===============================================================================
 # CREATE SECRET IN GOOGLE SECRET MANAGER
-# - Securely stores the Postgres credentials (username + generated password)
-# - Enables controlled access via IAM policies, instead of hardcoding credentials
-# - Replication is managed by Google (multi-region/high availability by default)
-# =================================================================================
+# ===============================================================================
+# - Creates a managed secret for MySQL credentials
+# - Prevents hardcoding credentials in Terraform or source control
+# - Uses Google-managed replication for high availability
+# ===============================================================================
 resource "google_secret_manager_secret" "mysql_secret" {
-  secret_id = "mysql-credentials" # Logical name for this secret
+  secret_id = "mysql-credentials"
 
   replication {
-    auto {} # Use default replication policy — ensures global durability and availability
+    auto {} # Default Google-managed replication
   }
 }
 
-# =================================================================================
+
+# ===============================================================================
 # ADD SECRET VERSION WITH CREDENTIAL DATA
-# - Binds the actual secret content (JSON) to the secret defined above
-# - Stores the username and securely generated password as a JSON object
-# - Enables service accounts, VMs, or workloads to fetch credentials securely at runtime
-# =================================================================================
+# ===============================================================================
+# - Writes the actual secret payload to Secret Manager
+# - Stores credentials as a structured JSON object
+# - Consumable by service accounts, VMs, and workloads at runtime
+# ===============================================================================
 resource "google_secret_manager_secret_version" "mysql_secret_version" {
-  secret = google_secret_manager_secret.mysql_secret.id # Target the parent secret
-  secret_data = jsonencode({                            # Encode structured credentials
-    username = "sysadmin"                               # Static username
-    password = random_password.mysql.result             # Dynamic password (from above)
+  secret = google_secret_manager_secret.mysql_secret.id
+
+  secret_data = jsonencode({
+    username = "sysadmin"
+    password = random_password.mysql.result
   })
 }

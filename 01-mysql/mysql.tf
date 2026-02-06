@@ -1,93 +1,126 @@
-# =================================================================================
-# CLOUD SQL INSTANCE: MYSQL FLEXIBLE INSTANCE
-# - Creates a managed MySQL 8.0 database in Google Cloud SQL
-# - Uses private networking only — no public IP access
+# ===============================================================================
+# FILE: mysql.tf
+# ===============================================================================
+# Provisions a private Google Cloud SQL MySQL instance and supporting resources.
+#
+# This module:
+#   - Creates a MySQL 8.0 Cloud SQL instance with private IP only
+#   - Configures backups and a defined maintenance window
+#   - Creates a SQL admin user with a generated password
+#   - Exposes the database via private Cloud DNS
+#   - Enforces ordering to avoid VPC peering race conditions
+#
+# NOTES:
+#   - Public IP access is explicitly disabled
+#   - Deletion protection is off for non-production use
+# ===============================================================================
+
+
+# ===============================================================================
+# CLOUD SQL INSTANCE: MYSQL
+# ===============================================================================
+# - Managed MySQL 8.0 database using private networking only
+# - Attached to a custom VPC via Private Service Access
 # - Includes backup and maintenance policies
-# =================================================================================
+# ===============================================================================
 resource "google_sql_database_instance" "mysql" {
-  name             = "mysql-instance" # Name of the Cloud SQL instance
-  database_version = "MYSQL_8_0"      # MySQL engine version
-  region           = "us-central1"    # Region for compute + networking consistency
+  name             = "mysql-instance"
+  database_version = "MYSQL_8_0"
+  region           = "us-central1"
 
   settings {
-    tier = "db-f1-micro" # Cost-effective tier for testing/small workloads
+    tier = "db-f1-micro"
 
     ip_configuration {
-      ipv4_enabled    = false                                      # Disable public IP (security best practice)
-      private_network = google_compute_network.mysql_vpc.self_link # Attach to custom VPC for private IP access
+      ipv4_enabled    = false
+      private_network = google_compute_network.mysql_vpc.self_link
     }
 
     backup_configuration {
-      enabled = true # Enable automated backups for durability
+      enabled = true
     }
 
     maintenance_window {
-      day          = 7        # Sunday (0=Monday, 6=Saturday, 7=Sunday)
-      hour         = 3        # 3 AM UTC (minimizes impact)
-      update_track = "stable" # Use stable updates (avoid breaking changes)
+      day          = 7
+      hour         = 3
+      update_track = "stable"
     }
   }
 
-  deletion_protection = false # Allow deletion (set to true in production to prevent accidents)
+  deletion_protection = false
 
-  depends_on = [null_resource.wait_for_vpc_peering] # Wait for private service connection before provisioning
+  depends_on = [
+    null_resource.wait_for_vpc_peering
+  ]
 }
 
-# =================================================================================
-# CLOUD SQL USER: MYSQL
-# - Creates a SQL-level user named "sysadmin
-# - Uses a strong, generated password from random_password.mysql
-# =================================================================================
+
+# ===============================================================================
+# CLOUD SQL USER: MYSQL ADMIN
+# ===============================================================================
+# - Creates a SQL-level administrative user
+# - Password is generated dynamically via random_password
+# ===============================================================================
 resource "google_sql_user" "mysql_user" {
-  name     = "sysadmin" # Username for MySQL admin
+  name     = "sysadmin"
   instance = google_sql_database_instance.mysql.name
-  host     = "%"        # Allow connections from any host (use with caution)    
-  password = random_password.mysql.result # Secure, randomly generated password
+  host     = "%"
+  password = random_password.mysql.result
 }
 
-# =================================================================================
-# PRIVATE DNS ZONE (Cloud DNS)
-# - Creates a private zone for internal resolution of the database IP
-# - Prevents hardcoding private IPs across systems
-# - Enables friendly, consistent naming inside the VPC
-# =================================================================================
+
+# ===============================================================================
+# PRIVATE DNS ZONE: INTERNAL MYSQL
+# ===============================================================================
+# - Enables internal name resolution for the database
+# - Avoids hardcoding private IP addresses in clients
+# - Scoped to the MySQL VPC only
+# ===============================================================================
 resource "google_dns_managed_zone" "private_dns" {
-  name       = "internal-mysql-zone"        # Internal Terraform name
-  dns_name   = "internal.mysql-zone.local." # DNS suffix for records (MUST end in dot)
-  visibility = "private"                    # Private zone — only visible inside VPC
+  name       = "internal-mysql-zone"
+  dns_name   = "internal.mysql-zone.local."
+  visibility = "private"
 
   private_visibility_config {
     networks {
-      network_url = google_compute_network.mysql_vpc.id # Scope zone visibility to the custom VPC
+      network_url = google_compute_network.mysql_vpc.id
     }
   }
 
-  description = "Private DNS zone for internal MySQL database"
+  description = "Private DNS zone for internal MySQL resolution"
 }
 
-# =================================================================================
-# PRIVATE DNS RECORD: mysql.internal.mysql-zone.local
-# - Resolves friendly DNS name to the private IP of the database
-# - Allows clients to use hostname instead of hardcoding IPs
-# =================================================================================
+
+# ===============================================================================
+# PRIVATE DNS RECORD: MYSQL A RECORD
+# ===============================================================================
+# - Maps a friendly hostname to the database private IP
+# - Used by internal clients for consistent connectivity
+# ===============================================================================
 resource "google_dns_record_set" "mysql_dns" {
-  name         = "mysql.internal.mysql-zone.local." # Full DNS name (MUST end in dot)
-  type         = "A"                                # A record (maps name to IP)
-  ttl          = 300                                # Time-to-live (seconds) — 5 minutes
+  name         = "mysql.internal.mysql-zone.local."
+  type         = "A"
+  ttl          = 300
   managed_zone = google_dns_managed_zone.private_dns.name
 
-  rrdatas = [google_sql_database_instance.mysql.private_ip_address] # Private IP of the DB instance
+  rrdatas = [
+    google_sql_database_instance.mysql.private_ip_address
+  ]
 }
 
-# =================================================================================
-# WAIT RESOURCE: DELAY TO ALLOW VPC PEERING PROPAGATION
-# - Ensures VPC peering connection is fully ready before Cloud SQL creation
-# - Avoids race condition where Cloud SQL cannot attach to network
-# =================================================================================
+
+# ===============================================================================
+# WAIT RESOURCE: VPC PEERING PROPAGATION
+# ===============================================================================
+# - Forces a delay to ensure Private Service Access is ready
+# - Prevents Cloud SQL creation failures due to race conditions
+# ===============================================================================
 resource "null_resource" "wait_for_vpc_peering" {
-  depends_on = [google_service_networking_connection.private_vpc_connection] # Wait for network connection
+  depends_on = [
+    google_service_networking_connection.private_vpc_connection
+  ]
 
   provisioner "local-exec" {
-    command = "echo 'NOTE: Waiting for VPC peering to fully propagate...' && sleep 120"
+    command = "echo 'NOTE: Waiting for VPC peering propagation' && sleep 120"
   }
 }

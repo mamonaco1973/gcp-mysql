@@ -1,49 +1,72 @@
+# ===============================================================================
+# FILE: main.tf
+# ===============================================================================
+# Defines required Terraform providers and configures Google Cloud access.
+#
+# This module:
+#   - Pins Google and Google Beta providers to compatible major versions
+#   - Configures providers using a service account JSON key file
+#   - Extracts reusable values from credentials for downstream use
+#
+# NOTES:
+#   - Credentials are loaded from a local JSON file (do not commit to source)
+#   - All resources inherit these provider configurations by default
+# ===============================================================================
+
+
+# ===============================================================================
+# TERRAFORM PROVIDER REQUIREMENTS
+# ===============================================================================
+# - Locks provider sources and major versions for repeatable builds
+# - Prevents accidental upgrades that may introduce breaking changes
+# ===============================================================================
 terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~>5"
+      version = "~> 5"
     }
+
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~>4"
+      version = "~> 4"
     }
   }
 }
 
-# =================================================================================
+
+# ===============================================================================
 # GOOGLE CLOUD PROVIDER CONFIGURATION
-# - This block configures the Google Cloud provider for Terraform
-# - Specifies which GCP project to use and which service account credentials to authenticate with
-# - All resources created by Terraform will use this configuration
-# =================================================================================
+# ===============================================================================
+# - Primary Google Cloud provider
+# - Authenticates using a service account JSON key file
+# - Project ID is derived from decoded credentials (avoids hardcoding)
+# ===============================================================================
 provider "google" {
-  project     = local.credentials.project_id # Dynamically reference project ID from decoded credentials (avoids hardcoding)
-  credentials = file("../credentials.json")  # Load credentials file (must be a valid GCP service account key in JSON format)
+  project     = local.credentials.project_id
+  credentials = file("../credentials.json")
 }
 
-# =================================================================================
-# GOOGLE-BETA CLOUD PROVIDER CONFIGURATION
-# - This block configures the Google Cloud provider for Terraform
-# - Specifies which GCP project to use and which service account credentials to authenticate with
-# - All resources created by Terraform will use this configuration
-# =================================================================================
+
+# ===============================================================================
+# GOOGLE BETA PROVIDER CONFIGURATION
+# ===============================================================================
+# - Beta provider for preview / newer GCP resources
+# - Uses the same project and credentials as the primary provider
+# ===============================================================================
 provider "google-beta" {
-  project     = local.credentials.project_id # Dynamically reference project ID from decoded credentials (avoids hardcoding)
-  credentials = file("../credentials.json")  # Load credentials file (must be a valid GCP service account key in JSON format)
+  project     = local.credentials.project_id
+  credentials = file("../credentials.json")
 }
 
-
-# =================================================================================
-# LOCAL VARIABLES: PARSE AND EXTRACT SERVICE ACCOUNT DETAILS
-# - Decodes the service account JSON file into a usable map
-# - Extracts reusable fields like project_id and service_account_email
-# - Simplifies usage across multiple Terraform modules and IAM bindings
-# =================================================================================
+# ===============================================================================
+# LOCAL VARIABLES: PARSE SERVICE ACCOUNT CREDENTIALS
+# ===============================================================================
+# - Decodes the service account JSON file into a reusable object
+# - Extracts common fields for use in IAM bindings and labeling
+# ===============================================================================
 locals {
-  credentials = jsondecode(file("../credentials.json")) # Parse the raw JSON file and expose as local object
-  # Structure includes fields such as: project_id, client_email, private_key, type, etc.
+  credentials = jsondecode(file("../credentials.json"))
 
-  service_account_email = local.credentials.client_email # Extracts email (used in IAM role bindings, logging, and labeling)
-  # ⚠️ This field must exist in the JSON — will error if malformed or renamed
+  service_account_email = local.credentials.client_email
 }
