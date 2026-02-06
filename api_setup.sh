@@ -40,7 +40,7 @@ fi
 # - Required for API enablement and resource provisioning
 # ===============================================================================
 gcloud auth activate-service-account \
-  --key-file="./credentials.json" > /dev/null
+  --key-file="./credentials.json" > /dev/null 2> /dev/null
 
 
 # ===============================================================================
@@ -84,13 +84,3 @@ gcloud services enable iam.googleapis.com
 gcloud services enable sqladmin.googleapis.com
 gcloud services enable servicenetworking.googleapis.com
 
-# ===============================================================================
-# INITIALIZE FIRESTORE (NATIVE MODE)
-# ===============================================================================
-# - Creates a Firestore Native database in the target region
-# - Output is suppressed to allow safe re-execution
-# ===============================================================================
-gcloud firestore databases create \
-  --location=us-central1 \
-  --type=firestore-native \
-  > /dev/null 2> /dev/null
