@@ -60,7 +60,6 @@ project_id="$(jq -r '.project_id' "./credentials.json")"
 echo "NOTE: Enabling APIs needed for build"
 gcloud config set project "${project_id}" > /dev/null
 
-
 # ===============================================================================
 # ENABLE REQUIRED GOOGLE CLOUD APIS
 # ===============================================================================
