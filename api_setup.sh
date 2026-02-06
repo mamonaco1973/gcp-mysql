@@ -58,7 +58,7 @@ project_id="$(jq -r '.project_id' "./credentials.json")"
 # - Ensures all API enablement targets the correct GCP project
 # ===============================================================================
 echo "NOTE: Enabling APIs needed for build"
-gcloud config set project "${project_id}"
+gcloud config set project "${project_id}" > /dev/null
 
 
 # ===============================================================================
