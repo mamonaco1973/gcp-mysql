@@ -40,7 +40,7 @@ fi
 # - Required for API enablement and resource provisioning
 # ===============================================================================
 gcloud auth activate-service-account \
-  --key-file="./credentials.json"
+  --key-file="./credentials.json" > /dev/null
 
 
 # ===============================================================================
@@ -82,8 +82,7 @@ gcloud services enable pubsub.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
 gcloud services enable iam.googleapis.com
 gcloud services enable sqladmin.googleapis.com
-gcloud services enable servicemanetworking.googleapis.com
-
+gcloud services enable servicenetworking.googleapis.com
 
 # ===============================================================================
 # INITIALIZE FIRESTORE (NATIVE MODE)
