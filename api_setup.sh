@@ -25,7 +25,7 @@ set -euo pipefail
 # - Ensures credentials.json exists before attempting authentication
 # - Exits immediately if the file is missing
 # ===============================================================================
-echo "NOTE: Validating credentials.json and testing gcloud authentication"
+#echo "NOTE: Validating credentials.json and testing gcloud authentication"
 
 if [[ ! -f "./credentials.json" ]]; then
   echo "ERROR: The file './credentials.json' does not exist." >&2
