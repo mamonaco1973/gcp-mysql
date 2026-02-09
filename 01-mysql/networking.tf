@@ -49,7 +49,7 @@ resource "google_compute_subnetwork" "mysql_subnet" {
 # - Open to the internet by default; restrict in production
 # ===============================================================================
 resource "google_compute_firewall" "allow_http" {
-  name    = "allow-http"
+  name    = "mysql-allow-http"
   network = google_compute_network.mysql_vpc.id
 
   allow {
@@ -58,6 +58,7 @@ resource "google_compute_firewall" "allow_http" {
   }
 
   source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["mysql-allow-http"]
 }
 
 
@@ -68,7 +69,7 @@ resource "google_compute_firewall" "allow_http" {
 # - Uses target_tags to scope access to specific instances
 # ===============================================================================
 resource "google_compute_firewall" "allow_ssh" {
-  name    = "allow-ssh"
+  name    = "mysql-allow-ssh"
   network = google_compute_network.mysql_vpc.id
 
   allow {
@@ -77,7 +78,7 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["allow-ssh"]
+  target_tags   = ["mysql-allow-ssh"]
 }
 
 

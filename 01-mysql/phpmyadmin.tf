@@ -73,8 +73,8 @@ resource "google_compute_instance" "phpmyadmin_vm" {
   # - Tags must match firewall rule target_tags to allow SSH/HTTP
   # =============================================================================
   tags = [
-    "allow-ssh",
-    "allow-http"
+    "mysql-allow-ssh",
+    "mysql-allow-http"
   ]
 
 
