@@ -25,7 +25,7 @@
 # ===============================================================================
 resource "google_sql_database_instance" "mysql" {
   name             = "mysql-instance"
-  database_version = "MYSQL_8_0"
+  database_version = "MYSQL_8_4"
   region           = "us-central1"
 
   settings {
