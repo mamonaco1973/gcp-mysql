@@ -88,7 +88,7 @@ resource "google_compute_firewall" "allow_ssh" {
 # - Required for Cloud SQL private IP via Service Networking (VPC peering)
 # ===============================================================================
 resource "google_compute_global_address" "private_ip_alloc" {
-  name          = "private-ip-alloc"
+  name          = "mysql-private-ip-alloc"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16
