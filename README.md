@@ -1,168 +1,157 @@
-# Deploying MySQL on Google Cloud Platform (GCP)
+# MySQL on GCP: Cloud SQL for MySQL with phpMyAdmin
 
-This project demonstrates how to deploy a secure, private MySQL instance on Google Cloud using Terraform.
+A private **Cloud SQL for MySQL** instance, built with Terraform and loaded
+with the [Sakila](https://dev.mysql.com/doc/sakila/en/) sample database. The
+instance has no public IP; a **phpMyAdmin** VM with a public IP gives you a
+browser client for it.
 
-The deployment includes a Cloud SQL for MySQL instance with public access disabled, integrated into a custom Virtual Private Cloud (VPC) and secured using private IP networking. Additionally, the project provisions a lightweight Ubuntu virtual machine that runs [phpMyAdmin](https://www.phpmyadmin.net/), a browser-based MySQL client, allowing private, browser-accessible interaction with the database.
+![phpMyAdmin](phpmyadmin.png)
 
-As part of the configuration, we deploy the [Sakila](https://dev.mysql.com/doc/sakila/en/) sample dataset—a fictional DVD rental database—to showcase real-world querying and administration in a private cloud context. The solution is ideal for developers and teams looking to build secure, internal-facing applications without exposing the database to the public internet.
+| Piece | Where | Role |
+|---|---|---|
+| **Cloud SQL for MySQL** | private IP, peered to `mysql-vpc` | `mysql-instance`, MySQL 8.4, `db-f1-micro`, automated backups, Sunday 03:00 maintenance window; no public IP |
+| **Private service access** | `mysql-vpc` | a reserved /16 range peered to Google's service network, which is where the instance's private IP comes from |
+| **Cloud DNS private zone** | visible to `mysql-vpc` | `internal.mysql-zone.local`, with `mysql.internal.mysql-zone.local` pointing at the instance |
+| **phpmyadmin-vm** | `mysql-subnet`, public IP | Ubuntu 24.04, `e2-small`, `us-central1-a`; loads Sakila, then serves phpMyAdmin 5.2.2 |
+| **Secret Manager** | global | `mysql-credentials`: the `sysadmin` user and password |
 
-![diagram](gcp-mysql.png)
+## Architecture
 
-## What You'll Learn
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
+  <img alt="A browser reaches phpmyadmin-vm, an Ubuntu 24.04 VM with a public IP, over HTTP. At boot the VM downloads phpMyAdmin and the Sakila sample database, loads Sakila into Cloud SQL for MySQL and serves phpMyAdmin, which connects on port 3306 over TLS. The instance has no public IP: it is reached over VPC peering on a private address, and a private Cloud DNS zone gives that address a name. The password is in Secret Manager." src="architecture-light.svg">
+</picture>
 
-- How to deploy a fully private MySQL Cloud SQL instance on GCP using Terraform
-- How to configure a custom VPC, subnet, and private IP for secure, internal connectivity
-- How to provision a VM running `phpMyAdmin` for private browser-based database access
-- Best practices for securing GCP-managed databases with private networking and infrastructure-as-code
+Regenerate with `python3 make_diagram.py`.
+
+- **`01-mysql/`** is the whole stack: the VPC (`mysql-vpc`) with
+  `mysql-subnet` (10.0.0.0/24), the firewall rules, the private service
+  access range and peering, the Cloud SQL instance and its `sysadmin` user,
+  the private DNS zone, the secret, and the phpMyAdmin VM.
+
+## How it boots
+
+1. Terraform builds the VPC and the private service access peering, then
+   waits 5 minutes for the peering to propagate before creating the Cloud SQL
+   instance. It generates a 24-character password for the `sysadmin` user.
+2. The VM's startup script installs Apache, PHP and the MySQL client,
+   downloads phpMyAdmin 5.2.2, and points it at
+   `mysql.internal.mysql-zone.local` over TLS (`ssl = true`, certificate not
+   verified). `/` redirects to `/phpmyadmin`.
+3. It downloads Sakila from dev.mysql.com and loads the schema and data, then
+   creates phpMyAdmin's own configuration tables in a `phpmyadmin` database.
+
+## Firewall rules
+
+```
+internet ─80, 22─▶ phpmyadmin-vm ─3306─▶ Cloud SQL (peered private IP)
+```
+
+| Rule | Port | Applies to |
+|---|---|---|
+| `mysql-allow-http` | tcp 80 | phpmyadmin-vm |
+| `mysql-allow-ssh` | tcp 22 | phpmyadmin-vm |
+
+Both allow `0.0.0.0/0`. The Cloud SQL instance has no public IP, so it can
+only be reached from inside the VPC.
 
 ## Prerequisites
 
 * [A Google Cloud Account](https://console.cloud.google.com/)
-* [Install gcloud CLI](https://cloud.google.com/sdk/docs/install) 
-* [Install Latest Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install gcloud CLI](https://cloud.google.com/sdk/docs/install)
+* [Install Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install jq](https://jqlang.github.io/jq/download/)
 
-If this is your first time watching our content, we recommend starting with this video: [GCP + Terraform: Easy Setup](https://youtu.be/3spJpYX4f7I). It provides a step-by-step guide to properly configure Terraform, Packer, and the gcloud CLI.
+Put a service account key in the repository root as `credentials.json`.
+Terraform uses it, and `check_env.sh` activates it and runs `api_setup.sh`,
+which enables the Cloud SQL Admin, Service Networking, Compute and other APIs
+the build needs. If this is your first time watching our content, we
+recommend starting with this video:
+[GCP + Terraform: Easy Setup](https://youtu.be/3spJpYX4f7I).
 
-## Download this Repository
+## Deploy
 
 ```bash
 git clone https://github.com/mamonaco1973/gcp-mysql.git
 cd gcp-mysql
+./apply.sh       # one phase: VPC, peering, Cloud SQL, DNS, secret, phpMyAdmin VM
 ```
 
-## Build the Code
+Everything deploys to `us-central1`. `apply.sh` ends by running
+`validate.sh`, which waits for phpMyAdmin to answer (up to 15 minutes) and
+prints:
 
-Run [check_env.sh](check_env.sh) then run [apply.sh](apply.sh).
+```
+===============================================================================
+BUILD RESULTS
+===============================================================================
+phpMyAdmin URL        : http://203.0.113.10
+MySQL Hostname (DNS)  : mysql.internal.mysql-zone.local
+===============================================================================
+```
+
+## Try it
+
+1. Get the password from Secret Manager:
+
+   ```bash
+   gcloud secrets versions access latest --secret=mysql-credentials \
+     | jq -r .password
+   ```
+
+2. Open the phpMyAdmin URL and sign in as `sysadmin`. The `sakila` database
+   is in the tree on the left.
+3. Run the sample queries from the **SQL** tab:
+
+   ```sql
+   SELECT
+       f.title AS film_title,
+       CONCAT(a.first_name, ' ', a.last_name) AS actor_name
+   FROM sakila.film f
+   JOIN sakila.film_actor fa ON f.film_id = fa.film_id
+   JOIN sakila.actor a ON fa.actor_id = a.actor_id
+   ORDER BY f.title, actor_name
+   LIMIT 20;
+   ```
+
+   ```sql
+   SELECT
+       f.title,
+       GROUP_CONCAT(
+           CONCAT(a.first_name, ' ', a.last_name)
+           ORDER BY a.last_name
+           SEPARATOR ', '
+       ) AS actor_names
+   FROM sakila.film f
+   JOIN sakila.film_actor fa ON f.film_id = fa.film_id
+   JOIN sakila.actor a ON fa.actor_id = a.actor_id
+   GROUP BY f.title
+   ORDER BY f.title
+   LIMIT 10;
+   ```
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `validate.sh` keeps retrying | The VM is still installing. `gcloud compute ssh phpmyadmin-vm --zone us-central1-a`, then `sudo journalctl -u google-startup-scripts`. |
+| `sakila` is missing | The load runs at the end of the startup script; look for `mysql` errors in the same journal. |
+| phpMyAdmin can't reach the server | `nslookup mysql.internal.mysql-zone.local` on the VM should return the instance's private IP. |
+| You want a local client | The instance is private. Connect from the VM (`mysql -h mysql.internal.mysql-zone.local -u sysadmin -p`). |
+
+## Teardown
 
 ```bash
-~/gcp-mysql$ ./apply.sh
-NOTE: Validating that required commands are found in the PATH.
-NOTE: gcloud is found in the current PATH.
-NOTE: packer is found in the current PATH.
-NOTE: terraform is found in the current PATH.
-NOTE: jq is found in the current PATH.
-NOTE: All required commands are available.
-NOTE: Validating credentials.json and test the gcloud command
-Activated service account credentials for: [terraform-build@debug-project-446221.iam.gserviceaccount.com]
-Initializing the backend...
-Initializing provider plugins...
-- Reusing previous version of hashicorp/random from the dependency lock file
-- Reusing previous version of hashicorp/google from the dependency lock file
-- Reusing previous version of hashicorp/google-beta from the dependency lock file
-- Reusing previous version of hashicorp/null from the dependency lock file
-- Using previously-installed hashicorp/google v5.45.2
-- Using previously-installed hashicorp/google-beta v4.85.0
-- Using previously-installed hashicorp/null v3.2.4
-- Using previously-installed hashicorp/random v3.7.2
-
-Terraform has been successfully initialized!
-[...]
+./destroy.sh     # deletes the Cloud SQL instance with gcloud first, then destroys the stack
 ```
 
-## Build Results
+The instance is deleted first so that Terraform can then remove the private
+service access peering.
 
-After applying the Terraform scripts, the following GCP resources will be created:
+## Notes
 
-### VPC & Subnet
-- VPC: `mysql-vpc`
-  - CIDR range: `10.0.0.0/23`
-- Subnet: `mysql-subnet`
-  - Region-based subnet (e.g., `us-central1`)
-  - CIDR: `10.0.0.0/25`
-- Firewall Rules:
-  - Allow internal traffic
-  - Allow HTTP and SSH access to the `phpmyadmin-vm`
-
-### Private Networking
-- Private Service Connection:
-  - Enables private IP for Cloud SQL
-  - Ensures all communication stays within the VPC
-
-### Cloud SQL for MySQL
-- Database Version: MySQL 8.0
-- Instance: `mysql-instance`
-  - Private IP only (no public access)
-  - Preloaded with [Sakila sample database](https://dev.mysql.com/doc/sakila/en/)
-  - Credentials stored securely in Google Secret Manager
-
-### Virtual Machine (phpMyAdmin)
-- VM Name: `phpmyadmin-vm`
-  - Ubuntu-based instance
-  - Deployed in the same subnet
-  - Uses startup script to install and run `phpMyAdmin`
-  - Connects privately to MySQL via internal IP
-
-## phpMyAdmin Demo
-
-[phpMyAdmin](https://www.phpmyadmin.net/) is a simple web-based and cross-platform MySQL database explorer.
-
-![phpmyadmin](phpmyadmin.png)
-
-Query 1:
-```sql
-SELECT
-    -- Select the film title from the 'film' table and label the column 'film_title'
-    f.title AS film_title,
-
-    -- Concatenate the actor's first and last name with a space between them and label the column 'actor_name'
-    CONCAT(a.first_name, ' ', a.last_name) AS actor_name
-
-FROM
-    -- Use the 'film' table as the main source of data (alias 'f')
-    sakila.film f
-
-    -- Join the 'film_actor' link table to associate films with their actors by film_id
-    JOIN sakila.film_actor fa
-        ON f.film_id = fa.film_id
-
-    -- Join the 'actor' table to get actor name details by actor_id
-    JOIN sakila.actor a
-        ON fa.actor_id = a.actor_id
-
--- Sort the results first by film title alphabetically, then by actor name alphabetically within each film
-ORDER BY
-    f.title,
-    actor_name
-
--- Return only the first 20 rows of the result set
-LIMIT 20;                                                   
-```
-
-Query 2:
-
-```sql
-SELECT
-    -- Select the film title from the 'film' table
-    f.title,
-
-    -- Concatenate all actor full names (first + last name) into a single string
-    -- GROUP_CONCAT builds this list, ordering by actor last name, separating each with a comma and space
-    GROUP_CONCAT(
-        CONCAT(a.first_name, ' ', a.last_name)
-        ORDER BY a.last_name
-        SEPARATOR ', '
-    ) AS actor_names
-
-FROM
-    -- Use the 'film' table as the starting point (aliased as 'f')
-    sakila.film f
-
-    -- Join 'film_actor' to link films to their actors via film_id
-    JOIN sakila.film_actor fa
-        ON f.film_id = fa.film_id
-
-    -- Join 'actor' to get the actual actor names via actor_id
-    JOIN sakila.actor a
-        ON fa.actor_id = a.actor_id
-
--- Group results by film title so each row represents a unique film
-GROUP BY
-    f.title
-
--- Sort the output rows alphabetically by film title
-ORDER BY
-    f.title
-
--- Only return the first 10 rows (the top 10 film titles alphabetically)
-LIMIT 10;
-```
+- **Lab only.** phpMyAdmin is open to the internet over plain HTTP, SSH is
+  open from anywhere, the database password is in the VM's startup script
+  metadata, and the VM runs as the same service account as Terraform with
+  the `cloud-platform` scope. Restrict the firewall rules and use a narrower
+  VM service account for anything more.
